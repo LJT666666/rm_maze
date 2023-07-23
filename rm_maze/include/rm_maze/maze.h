@@ -117,10 +117,11 @@ private:
   /// follow trail
   bool is_start_trail_ = false;
   double angle_error_test_{};
+  double error_ratio_ = 0.2;
 
   /// send points
   bool start_send_point_ = false;
-
+  bool send_debug_point_ = false;
   /// image
   Mat node_map_;
   Mat official_resize_img_;
@@ -151,6 +152,7 @@ private:
 
   void callback(const sensor_msgs::ImageConstPtr &img) {
     target_array_.target_point_array.clear();
+    target_array_.is_treasure.clear();
     boost::shared_ptr<cv_bridge::CvImage> temp =
         boost::const_pointer_cast<cv_bridge::CvImage>(
             cv_bridge::toCvShare(img, "bgr8"));
@@ -170,6 +172,7 @@ private:
         planPath(nodes_, path);
         draw(official_resize_img_, nodes_, path);
         sendPoints(nodes_, path);
+        target_pub_.publish(target_array_);
       }
       //      if(resend_point_){
       //        resend_point_ = false;
@@ -185,16 +188,36 @@ private:
       map_thresh_debug_.publish(
           cv_bridge::CvImage(std_msgs::Header(), "mono8", map_warp_img_)
               .toImageMsg());
+
       return;
     }
+    if (send_debug_point_) {
+      send_debug_point_ = false;
+      geometry_msgs::PointStamped temp_point{};
+      temp_point.header.frame_id = "odom";
+      temp_point.header.stamp = ros::Time(0);
+      temp_point.point.x = 2;
+      temp_point.point.y = 0;
+      temp_point.point.z = 0.;
+      //      target_array_.is_treasure.emplace_back(
+      //          nodes_[actual_path[i] - 1].node_type);
+      geometry_msgs::PointStamped temp_point1{};
+      temp_point1.header.frame_id = "odom";
+      temp_point1.header.stamp = ros::Time(0);
+      temp_point1.point.x = 2;
+      temp_point1.point.y = 2;
+      temp_point1.point.z = 0.;
+      target_array_.target_point_array.emplace_back(temp_point);
+      target_array_.target_point_array.emplace_back(temp_point1);
+      target_pub_.publish(target_array_);
+    }
+    if (!init_flag_)
+      generateMap();
     init_flag_ = true;
-    generateMap();
 
     auto predict_end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> infer_time = predict_end - predict_start;
     //        ROS_INFO("infer_time: %f", infer_time.count());
-
-    target_pub_.publish(target_array_);
   }
 };
 

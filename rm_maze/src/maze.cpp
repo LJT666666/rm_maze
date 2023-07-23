@@ -59,7 +59,9 @@ void MazeProc::mazeconfigCB(rm_maze::MazeConfig &config, uint32_t level) {
     config.canny_low_thresh = canny_low_thresh_;
     config.canny_high_thresh = canny_high_thresh_;
     config.start_send_point = start_send_point_;
+    config.send_debug_point = send_debug_point_;
     config.is_start_trail = is_start_trail_;
+    config.error_ratio = error_ratio_;
     dynamic_reconfig_initialized_ = true;
   } else {
     draw_type_ = DrawImage(config.draw_type);
@@ -74,11 +76,13 @@ void MazeProc::mazeconfigCB(rm_maze::MazeConfig &config, uint32_t level) {
     end_index_ = config.end_index;
     angle_error_test_ = config.angle_error_test;
     start_send_point_ = config.start_send_point;
+    send_debug_point_ = config.send_debug_point;
     is_start_trail_ = config.is_start_trail;
-    //    is_treasures_found_ = false;
-    //    is_path_found_ = false;
+    error_ratio_ = config.error_ratio;
+    is_treasures_found_ = false;
+    is_path_found_ = false;
   }
-  ROS_INFO("dynamic %d", start_index_);
+  ROS_INFO("dynamic reconfigure.");
 }
 
 void MazeProc::generateMap() {
@@ -775,7 +779,7 @@ void MazeProc::followTrail() {
   vector<Vec2f> lines, lines1;
   HoughLines(edgeMat, lines, 1, CV_PI / 180, 180, 0, 0, 0, 0.4);
   HoughLines(edgeMat, lines1, 1, CV_PI / 180, 180, 0, 0, 2.84, 3.14);
-  double error;
+  double error{};
   for (size_t i = 0; i < lines.size(); i++) {
     // 根据直线参数表达式绘制相应检测结果
     float rho = lines[i][0], theta = lines[i][1];
@@ -788,7 +792,7 @@ void MazeProc::followTrail() {
     pt2.y = cvRound(y0 - 1000 * (a));
     line(houghMat, pt1, pt2, Scalar(0, 0, 255), 3, 4);
     cout << "line_x " << pt1.x << " " << pt2.x << endl;
-    error = 0.017 * (0.5 * (pt1.x + pt2.x) - 640);
+    error = error_ratio_ * (0.5 * (pt1.x + pt2.x) - 640);
   }
   for (size_t i = 0; i < lines1.size(); i++) {
     // 根据直线参数表达式绘制相应检测结果
@@ -802,8 +806,11 @@ void MazeProc::followTrail() {
     pt2.y = cvRound(y0 - 1000 * (a));
     line(houghMat, pt1, pt2, Scalar(0, 0, 255), 3, 4);
     cout << "line1_x " << pt1.x << " " << pt2.x << endl;
-    error = 0.017 * (0.5 * (pt1.x + pt2.x) - 640);
+    error = error_ratio_ * (0.5 * (pt1.x + pt2.x) - 640);
   }
+
+  if(lines.size() == 0 && lines1.size() == 0)
+    return;
 
   sensor_msgs::ImagePtr msg;
   Mat draw_image;
@@ -856,24 +863,24 @@ void MazeProc::sendPoints(const vector<Noode> &nodes, vector<int> &path) {
   vector<int> actual_path;
   actual_path.emplace_back(70);
   actual_path.emplace_back(path[0]);
-  for (int i = 1; i < path.size(); i++) {
-    if (nodes[path[i - 1] - 1].x != nodes[path[i + 1] - 1].x &&
-        nodes[path[i - 1] - 1].y != nodes[path[i + 1] - 1].y) {
+  for (int i = 1; i < path.size() - 1; i++) {
+    if (nodes_[path[i - 1] - 1].x != nodes_[path[i + 1] - 1].x &&
+        nodes_[path[i - 1] - 1].y != nodes_[path[i + 1] - 1].y) {
       actual_path.emplace_back(path[i]);
-    } else if (nodes[path[i]].node_type == 0) {
+    } else if (nodes_[path[i]].node_type == 0) {
       actual_path.emplace_back(path[i]);
     }
   }
 
   for (int i = 0; i < actual_path.size(); ++i) {
-    cout << actual_path[i] << " ";
+    //    cout << actual_path[i] << " ";
   }
   cout << endl;
 
   double actual_x, actual_y;
   for (int i = 0; i < actual_path.size(); i++) {
-    actual_y = ((nodes[actual_path[i] - 1].x + 2) * 0.5) * 0.4;
-    actual_x = (11 - (nodes[actual_path[i] - 1].y + 2) * 0.5 - 1) * 0.4;
+    actual_y = ((nodes_[actual_path[i] - 1].x + 2) * 0.5) * 0.4;
+    actual_x = (11 - (nodes_[actual_path[i] - 1].y + 2) * 0.5 - 1) * 0.4;
     cout << actual_y << " " << actual_x << endl;
     geometry_msgs::PointStamped temp_point{};
     temp_point.header.frame_id = "odom";
@@ -881,7 +888,8 @@ void MazeProc::sendPoints(const vector<Noode> &nodes, vector<int> &path) {
     temp_point.point.x = actual_y;
     temp_point.point.y = actual_x;
     temp_point.point.z = 0.;
-    target_array_.is_treasure.emplace_back(nodes[actual_path[i] - 1].node_type);
+    target_array_.is_treasure.emplace_back(
+        nodes_[actual_path[i] - 1].node_type);
     target_array_.target_point_array.emplace_back(temp_point);
   }
 }
@@ -907,7 +915,11 @@ void MazeProc::draw(Mat &resize_img, const vector<Noode> &nodes,
 
   vector<int> actual_path;
   actual_path.emplace_back(path[0]);
-  for (int i = 1; i < path.size(); i++) {
+  cout << path.size() << endl;
+  cout << nodes.size() << endl;
+  for (int i = 1; i < path.size() - 1; i++) {
+    cout << i << endl;
+    cout << path[i] << endl;
     if (nodes[path[i - 1] - 1].x != nodes[path[i + 1] - 1].x &&
         nodes[path[i - 1] - 1].y != nodes[path[i + 1] - 1].y) {
       actual_path.emplace_back(path[i]);
