@@ -1,0 +1,8 @@
+prefix=/usr/local
+
+Name: rm_maze
+Description: Description of rm_maze
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lrm_maze -limage_transport -lcv_bridge
+Requires: roscpp dynamic_reconfigure geometry_msgs message_generation rm_common rm_msgs std_msgs pluginlib

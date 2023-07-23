@@ -1,0 +1,7 @@
+<library path="lib/librm_maze">
+    <class name="rm_maze/MazeProc"
+           type="rm_maze::MazeProc"
+           base_class_type="nodelet::Nodelet">
+        <description>This is a openvino processor plugin.</description>
+    </class>
+</library>
