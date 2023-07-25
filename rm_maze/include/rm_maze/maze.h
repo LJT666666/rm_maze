@@ -22,6 +22,7 @@
 #include <rm_msgs/TargetDetectionArray.h>
 #include <rm_msgs/TargetPointArray.h>
 #include <ros/ros.h>
+#include <std_msgs/Float64.h>
 #include <thread>
 
 using namespace InferenceEngine;
@@ -117,7 +118,7 @@ private:
   /// follow trail
   bool is_start_trail_ = false;
   double angle_error_test_{};
-  double error_ratio_ = 0.2;
+  double error_ratio_ = 0.001;
 
   /// send points
   bool start_send_point_ = false;

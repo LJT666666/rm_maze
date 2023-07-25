@@ -45,7 +45,7 @@ void MazeProc::initialize(ros::NodeHandle &nh) {
   bag_sub_ = it_->subscribe("/galaxy_camera/galaxy_camera/image_raw", 1,
                             &MazeProc::callback, this);
   target_pub_ = nh.advertise<decltype(target_array_)>("/target_point", 1);
-  angle_error_pub_ = nh.advertise<rm_msgs::FollowTrail>("/angle_error", 1);
+  angle_error_pub_ = nh.advertise<rm_msgs::FollowTrail>("/line_error", 1);
 }
 
 void MazeProc::mazeconfigCB(rm_maze::MazeConfig &config, uint32_t level) {
@@ -780,6 +780,8 @@ void MazeProc::followTrail() {
   HoughLines(edgeMat, lines, 1, CV_PI / 180, 180, 0, 0, 0, 0.4);
   HoughLines(edgeMat, lines1, 1, CV_PI / 180, 180, 0, 0, 2.84, 3.14);
   double error{};
+  cv::Point2d vec1(0, 1);
+  float angle{};
   for (size_t i = 0; i < lines.size(); i++) {
     // 根据直线参数表达式绘制相应检测结果
     float rho = lines[i][0], theta = lines[i][1];
@@ -791,8 +793,13 @@ void MazeProc::followTrail() {
     pt2.x = cvRound(x0 - 1000 * (-b));
     pt2.y = cvRound(y0 - 1000 * (a));
     line(houghMat, pt1, pt2, Scalar(0, 0, 255), 3, 4);
-    cout << "line_x " << pt1.x << " " << pt2.x << endl;
-    error = error_ratio_ * (0.5 * (pt1.x + pt2.x) - 640);
+    cv::Point2d vec2(pt2.x - pt1.x, pt2.y - pt1.y);
+    auto costheta =
+        static_cast<float>(vec1.dot(vec2) / (cv::norm(vec1) * cv::norm(vec2)));
+    //    angle = acos(costheta);
+    angle = theta;
+    error = error_ratio_ * (pt2.x - 640);
+    cout << "line_x " << error << endl;
   }
   for (size_t i = 0; i < lines1.size(); i++) {
     // 根据直线参数表达式绘制相应检测结果
@@ -805,11 +812,16 @@ void MazeProc::followTrail() {
     pt2.x = cvRound(x0 - 1000 * (-b));
     pt2.y = cvRound(y0 - 1000 * (a));
     line(houghMat, pt1, pt2, Scalar(0, 0, 255), 3, 4);
-    cout << "line1_x " << pt1.x << " " << pt2.x << endl;
-    error = error_ratio_ * (0.5 * (pt1.x + pt2.x) - 640);
+    cv::Point2d vec3(pt2.x - pt1.x, pt2.y - pt1.y);
+    auto costheta =
+        static_cast<float>(vec1.dot(vec3) / (cv::norm(vec1) * cv::norm(vec3)));
+    //    angle = acos(costheta);
+    angle = theta - 3.14;
+    error = error_ratio_ * (pt2.x - 640);
+    cout << "line1_x " << error << endl;
   }
 
-  if(lines.size() == 0 && lines1.size() == 0)
+  if (lines.size() == 0 && lines1.size() == 0)
     return;
 
   sensor_msgs::ImagePtr msg;
@@ -852,10 +864,13 @@ void MazeProc::followTrail() {
   }
   follow_trail_debug_pub_.publish(msg);
 
+  //  rm_msgs::FollowTrail angle_error_msg;
+  //  angle_error_msg.error = error;
+  //  angle_error_msg.is_detect_corner = true;
+  //  angle_error_msg.set_point = 0;
   rm_msgs::FollowTrail angle_error_msg;
-  angle_error_msg.error = error;
-  angle_error_msg.is_detect_corner = true;
-  angle_error_msg.set_point = 0;
+  angle_error_msg.pos_error = error;
+  angle_error_msg.angle_error = angle;
   angle_error_pub_.publish(angle_error_msg);
 }
 
